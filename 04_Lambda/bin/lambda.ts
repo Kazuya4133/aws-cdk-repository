@@ -7,4 +7,13 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 const app = new cdk.App();
-new LambdaStack(app, 'LambdaStack');
+
+const account = process.env.CDK_DEFAULT_ACCOUNT;
+const region = process.env.CDK_DEFAULT_REGION;
+
+const env = {
+    account: account,
+    region: region
+}
+
+new LambdaStack(app, 'LambdaStack', { env });

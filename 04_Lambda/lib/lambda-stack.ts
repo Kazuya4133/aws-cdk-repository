@@ -2,17 +2,16 @@ import * as cdk from 'aws-cdk-lib';
 import { Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as iam from 'aws-cdk-lib/aws-iam';
+// import * as sns from 'aws-cdk-lib/aws-sns';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import { ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 
 
 export class LambdaStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
-
-    // const role = iam.Role.fromRoleName(this, "Role", "ttcc-iam-lambda", {
-    //   mutable: false
-    // });
 
     const role = new iam.Role(this, "LambdaRole", {
       assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
@@ -23,18 +22,47 @@ export class LambdaStack extends cdk.Stack {
         iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaVPCAccessExecutionRole'),
       ]
     });
+    const securityGroup = ec2.SecurityGroup.fromSecurityGroupId(this, "SG", "sg-0094d24ce08a24a42");
 
-    const lambdaNames = ['Sample1', 'Sample2', 'Sample3', 'Sample4', 'Sample5'];
+    const lambdaNames = ['lambda-01', 'lambda-02', 'lambda-03'];
 
     for (let i = 0; i < lambdaNames.length; i++) {
-      const testLambda = new lambda.Function(this, `Lambda${lambdaNames[i]}`, {
-        functionName: `lambda-${lambdaNames[i]}`,
-        code: lambda.Code.fromAsset('../04_Lambda/lib/lambdaCodes/'),
+      const lambdaName = lambdaNames[i];
+      const lambdaFunction = new lambda.Function(this, `${lambdaNames[i]}`, {
+        functionName: `${lambdaNames[i]}`,
+        description: `${lambdaNames[i]}`,
+        environment: {
+          'LAMBDA_NAME': lambdaName
+        },
+        code: lambda.Code.fromAsset(`../04_Lambda/lib/src/${lambdaNames[i]}`), // フォルダ名を指定する
         handler: 'lambda_function.lambda_handler',
-        runtime: lambda.Runtime.PYTHON_3_11,
+        runtime: lambda.Runtime.PYTHON_3_12,
         role: role,
         memorySize: 128,
-        timeout: Duration.seconds(20)
+        timeout: Duration.seconds(20),
+        retryAttempts: 0,
+      });
+      const errorAlarm = new cloudwatch.Alarm(this, `ErrorAlarmFor${lambdaNames[i]}`, {
+        alarmName: `${lambdaNames[i]}_ErrorAlarm`,
+        alarmDescription: `${lambdaNames[i]}_ErrorAlarm`,
+        evaluationPeriods: 1,
+        threshold: 3,
+        metric: lambdaFunction.metricErrors({
+          period: cdk.Duration.minutes(1)
+        }),
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        actionsEnabled: true,
+      });
+      const throttlingAlarm = new cloudwatch.Alarm(this, `ThrottlingAlarmFor${lambdaNames[i]}`, {
+        alarmName: `${lambdaNames[i]}_ThrottlingAlarm`,
+        alarmDescription: `${lambdaNames[i]}_ThrottlingAlarm`,
+        evaluationPeriods: 1,
+        threshold: 3,
+        metric: lambdaFunction.metricThrottles({
+          period: cdk.Duration.minutes(1)
+        }),
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        actionsEnabled: true,
       });
     }
   }
