@@ -8,11 +8,40 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import { ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 
-
 export class LambdaStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
+    // VPCの作成
+    const vpc = new ec2.Vpc(this, 'VPC', {
+      vpcName: 'VPCforLambdaFunctions',
+      ipAddresses: ec2.IpAddresses.cidr('10.0.0.0/16'),
+      subnetConfiguration: [],
+      maxAzs: 3,
+      enableDnsHostnames: true,
+      enableDnsSupport:true,
+      createInternetGateway: false,
+      natGateways: 0,
+    });
+
+    // プライベートサブネットの作成
+    const privateSubnet01 = new ec2.PrivateSubnet(this, 'PrivateSubnet01', {
+      vpcId: vpc.vpcId,
+      cidrBlock: '10.0.0.0/24',
+      availabilityZone: vpc.availabilityZones[0]
+    });
+    const privateSubnet02 = new ec2.PrivateSubnet(this, 'PrivateSubnet02', {
+      vpcId: vpc.vpcId,
+      cidrBlock: '10.0.1.0/24',
+      availabilityZone: vpc.availabilityZones[1]
+    });
+    const privateSubnet03 = new ec2.PrivateSubnet(this, 'PrivateSubnet03', {
+      vpcId: vpc.vpcId,
+      cidrBlock: '10.0.2.0/24',
+      availabilityZone: vpc.availabilityZones[2]
+    });
+
+    // VPC Lambda用のIAMロールを作成
     const role = new iam.Role(this, "LambdaRole", {
       assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
       roleName: "iamRoleForLambda",
@@ -22,7 +51,6 @@ export class LambdaStack extends cdk.Stack {
         iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaVPCAccessExecutionRole'),
       ]
     });
-    const securityGroup = ec2.SecurityGroup.fromSecurityGroupId(this, "SG", "sg-0094d24ce08a24a42");
 
     const lambdaNames = ['lambda-01', 'lambda-02', 'lambda-03'];
 
